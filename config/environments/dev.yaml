@@ -1,0 +1,206 @@
+aws:
+  account_id: "539592451537"
+  region: ap-south-1
+
+project:
+  name: nivyo
+  environment: dev
+
+tags:
+  Project: nivyo
+  Environment: dev
+  ManagedBy: AWS CDK
+  Application: FinRAG
+
+stacks:
+  vpc:
+    enabled: true
+    id: VpcStack
+  storage:
+    enabled: true
+    id: StorageStack
+  iam:
+    enabled: true
+    id: IamStack
+  bedrock:
+    enabled: true
+    id: BedrockStack
+  pipeline:
+    enabled: true
+    id: PipelineStack
+  events:
+    enabled: true
+    id: EventsStack
+
+network:
+  vpc_name: VPC-Nivyo-Dev
+  vpc_cidr: 10.0.0.0/27
+  enable_dns_support: true
+  enable_dns_hostnames: true
+  availability_zones: 1
+  availability_zone_names:
+    - ap-south-1b
+  public_subnet_cidrs:
+    - 10.0.0.0/28
+  private_subnet_cidrs:
+    - 10.0.0.16/28
+  resource_names:
+    internet_gateway: IGway-Nivyo-Dev
+    public_subnets:
+      - Subnet-Nivyo-Dev-pub1-1b
+    private_subnets:
+      - Subnet-Nivyo-Dev-pvt1-1b
+    public_route_table: RouteTbl-Nivyo-Dev-public
+    private_route_tables:
+      - RouteTbl-Nivyo-Dev-private
+    nat_elastic_ip: EIP-Nivyo-Dev-NAT
+    nat_gateway: NAT-Nivyo-Dev
+  nat_gateway:
+    enabled: false
+  vpc_endpoints:
+    s3_gateway:
+      enabled: true
+    bedrock_interface:
+      enabled: false
+      services: []
+  security_groups:
+    lambda:
+      name: SecGrp-Nivyo-Dev
+      description: Security group for FinRAG private Lambda functions
+      ingress_rules:
+        - protocol: tcp
+          from_port: 80
+          to_port: 80
+          cidr: 0.0.0.0/0
+          description: HTTP from anywhere
+        - protocol: tcp
+          from_port: 443
+          to_port: 443
+          cidr: 0.0.0.0/0
+          description: HTTPS from anywhere
+      egress_rules:
+        - protocol: tcp
+          from_port: 443
+          to_port: 443
+          cidr: 0.0.0.0/0
+          description: HTTPS outbound
+    vpc_endpoints:
+      name: SG-Nivyo-Dev-VpcEndpoints
+      description: Allow private HTTPS access to interface VPC endpoints
+      ingress_rules:
+        - protocol: tcp
+          from_port: 443
+          to_port: 443
+          cidr: 10.0.0.0/27
+          description: HTTPS from VPC CIDR to interface endpoints
+      egress_rules: []
+
+observability:
+  vpc_flow_logs:
+    enabled: true
+    traffic_type: ALL
+    log_group_name: /aws/vpc/nivyo-dev-flow-logs
+    retention_days: 365
+    removal_policy: DESTROY
+    import_existing_log_group: true
+
+storage:
+  input_bucket:
+    name: nivyo-dev-input-docs
+    versioning_enabled: false
+    block_public_access: true
+    encryption_type: SSE_S3
+    event_notifications:
+      enabled: true
+      prefix: ""
+      suffix: ""
+  chunk_store_bucket:
+    name: nivyo-dev-chunk-store
+    versioning_enabled: true
+    block_public_access: true
+    encryption_type: SSE_S3
+
+iam:
+  roles:
+    lambda_execution_role_name: nivyo-dev-lambda-execution
+    bedrock_kb_role_name: nivyo-dev-bedrock-kb
+
+bedrock:
+  knowledge_base:
+    name: nivyo-dev-knowledge-base
+    description: FinRAG Bedrock Knowledge Base for financial document retrieval
+  embedding_model:
+    model_id: amazon.titan-embed-text-v2:0
+    dimensions: 1024
+  vector_store:
+    collection_name: nivyo-dev-vectors
+    collection_type: VECTORSEARCH
+    vector_index_name: nivyo-dev-vector-index
+    allow_public_network_access: true
+    fields:
+      vector_field: bedrock-knowledge-base-default-vector
+      text_field: AMAZON_BEDROCK_TEXT
+      metadata_field: AMAZON_BEDROCK_METADATA
+
+pipeline:
+  chunk_size: 1000
+  chunk_overlap: 200
+  pipeline_version: "1.0.0"
+  embedding_model_id: amazon.titan-embed-text-v2:0
+  lambdas:
+    router:
+      enabled: true
+      function_name: FinRAG-Router
+      handler: handler.handler
+      runtime: python3.11
+      memory_mb: 512
+      timeout_seconds: 60
+      code_path: lambdas/router
+    sebi_parser:
+      enabled: true
+      function_name: FinRAG-SebiParser
+      handler: handler.handler
+      runtime: python3.11
+      memory_mb: 1024
+      timeout_seconds: 300
+      code_path: lambdas/sebi_parser
+    insurance_parser:
+      enabled: true
+      function_name: FinRAG-InsuranceParser
+      handler: handler.handler
+      runtime: python3.11
+      memory_mb: 1024
+      timeout_seconds: 300
+      code_path: lambdas/insurance_parser
+    catalogue_parser:
+      enabled: true
+      function_name: FinRAG-CatalogueParser
+      handler: handler.handler
+      runtime: python3.11
+      memory_mb: 512
+      timeout_seconds: 120
+      code_path: lambdas/catalogue_parser
+    chunker:
+      enabled: true
+      function_name: FinRAG-Chunker
+      handler: handler.handler
+      runtime: python3.11
+      memory_mb: 512
+      timeout_seconds: 120
+      code_path: lambdas/chunker
+    tagger:
+      enabled: true
+      function_name: FinRAG-Tagger
+      handler: handler.handler
+      runtime: python3.11
+      memory_mb: 256
+      timeout_seconds: 60
+      code_path: lambdas/tagger
+    embedder:
+      enabled: true
+      function_name: FinRAG-Embedder
+      handler: handler.handler
+      runtime: python3.11
+      memory_mb: 1024
+      timeout_seconds: 300
+      code_path: lambdas/embedder
